@@ -1,21 +1,13 @@
 # =============================================================================
 # NovaeOS - Makefile
-# Builds the OS kernel and creates a bootable ISO
+# Builds the OS kernel and runs it in QEMU
 # =============================================================================
 
 # ---- Toolchain ---------------------------------------------------------------
-# Cross-compiler targeting bare-metal i686 (no OS ABI assumptions)
-# Install: i686-elf-gcc, i686-elf-ld, nasm, grub-mkrescue, xorriso
-# On Ubuntu/Debian: sudo apt install build-essential nasm grub-pc-bin xorriso
-# Or use Docker (see Dockerfile)
-
-CC      := i686-elf-gcc
-LD      := i686-elf-ld
+# Use cross-compiler if available, otherwise fall back to system gcc/ld with -m32
+CC      ?= $(shell which i686-elf-gcc 2>/dev/null || echo gcc)
+LD      ?= $(shell which i686-elf-ld 2>/dev/null || echo ld)
 AS      := nasm
-
-# Fallback: use system GCC if cross-compiler not available (not recommended)
-# CC    := gcc
-# LD    := ld
 
 # ---- Flags ------------------------------------------------------------------
 CFLAGS  := -m32                  \
@@ -27,15 +19,13 @@ CFLAGS  := -m32                  \
             -Wall                \
             -Wextra              \
             -nostdlib            \
-            -nostdinc            \
             -std=c11             \
             -Ikernel
 
 ASFLAGS := -f elf32
 
 LDFLAGS := -m elf_i386           \
-            -T linker.ld         \
-            --oformat binary
+            -T linker.ld
 
 # ---- Directories -------------------------------------------------------------
 BUILD   := build
@@ -68,12 +58,11 @@ KERNEL   := $(BUILD)/kernel.bin
 ISO      := novaeos.iso
 
 # ---- Targets -----------------------------------------------------------------
-.PHONY: all clean iso run run-debug
+.PHONY: all clean iso run run-iso run-debug info
 
 all: $(KERNEL)
 	@echo ""
 	@echo "  ✓ NovaeOS kernel built: $(KERNEL)"
-	@echo "  Run 'make iso' to create a bootable ISO"
 	@echo "  Run 'make run' to launch in QEMU"
 	@echo ""
 
@@ -100,51 +89,42 @@ iso: $(KERNEL)
 	@echo "  Creating ISO..."
 	@mkdir -p $(ISO_DIR)/boot/grub
 	@cp $(KERNEL) $(ISO_DIR)/boot/kernel.bin
-	@cat > $(GRUB_CFG) << 'EOF'
-set timeout=3
-set default=0
-
-menuentry "NovaeOS 1.0.0" {
-    multiboot /boot/kernel.bin
-    boot
-}
-EOF
 	grub-mkrescue -o $(ISO) $(ISO_DIR)
 	@echo "  ✓ ISO created: $(ISO)"
 
-# Run in QEMU (no ISO needed, use kernel directly via multiboot)
+# Run in QEMU (direct multiboot kernel)
 run: $(KERNEL)
 	@echo "  Launching NovaeOS in QEMU..."
-	qemu-system-i386                    \
-	    -kernel $(KERNEL)               \
-	    -m 128M                         \
-	    -no-shutdown                    \
-	    -no-reboot                      \
-	    -vga std                        \
+	qemu-system-i386 \
+	    -kernel $(KERNEL) \
+	    -m 128M \
+	    -no-shutdown \
+	    -no-reboot \
+	    -vga std \
 	    -name "NovaeOS"
 
-# Run with ISO (more realistic boot)
+# Run with ISO
 run-iso: $(ISO)
-	qemu-system-i386                    \
-	    -cdrom $(ISO)                   \
-	    -m 128M                         \
-	    -no-shutdown                    \
-	    -no-reboot                      \
-	    -vga std                        \
+	qemu-system-i386 \
+	    -cdrom $(ISO) \
+	    -m 128M \
+	    -no-shutdown \
+	    -no-reboot \
+	    -vga std \
 	    -name "NovaeOS"
 
 # Debug: run with GDB server
 run-debug: $(KERNEL)
-	qemu-system-i386                    \
-	    -kernel $(KERNEL)               \
-	    -m 128M                         \
-	    -s -S                           \
-	    -vga std                        \
+	qemu-system-i386 \
+	    -kernel $(KERNEL) \
+	    -m 128M \
+	    -s -S \
+	    -vga std \
 	    -name "NovaeOS Debug"
 
 # Clean build artifacts
 clean:
-	@rm -rf $(BUILD) $(ISO_DIR) $(ISO)
+	@rm -rf $(BUILD) $(ISO)
 	@echo "  Cleaned."
 
 # Show build info
