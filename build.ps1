@@ -41,7 +41,7 @@ Write-Host "[2/3] Compiling NovaeOS..." -ForegroundColor Yellow
 docker run --rm `
     -v "${ProjectDir}:/os" `
     novaeos-builder `
-    bash -c "cd /os && make clean && make all CC=gcc LD=ld CFLAGS='-m32 -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -O2 -Wall -Wextra -nostdlib -nostdinc -std=c11 -Ikernel' LDFLAGS='-m elf_i386 -T linker.ld --oformat binary'"
+    bash -c "cd /os && make clean && make all CC=gcc LD=ld CFLAGS='-m32 -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -O2 -Wall -Wextra -nostdlib -std=c11 -Ikernel' LDFLAGS='-m elf_i386 -T linker.ld'"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Build failed!" -ForegroundColor Red

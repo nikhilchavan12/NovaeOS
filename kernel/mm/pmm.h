@@ -16,5 +16,6 @@ void *pmm_alloc_block(void);
 void  pmm_free_block(void *p);
 size_t pmm_get_free_blocks(void);
 size_t pmm_get_total_blocks(void);
+void   pmm_mark_region_used(uint32_t base, uint32_t size);
 
 #endif /* PMM_H */

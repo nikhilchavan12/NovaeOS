@@ -112,6 +112,7 @@ int vfs_append(const char *name, const char *data, size_t len) {
 int vfs_read(const char *name, char *buf, size_t buf_len) {
     vfs_node_t *node = find_node(name);
     if (!node) return -1;
+    if (buf_len == 0) return 0;
     size_t to_copy = node->size < buf_len - 1 ? node->size : buf_len - 1;
     kmemcpy(buf, node->data, to_copy);
     buf[to_copy] = '\0';

@@ -1,7 +1,7 @@
 
 # NovaeOS 🖥️
 
-**A 32-bit x86 Operating System Kernel** — written from scratch in C and NASM assembly, with a dark glassmorphism-inspired terminal UI.
+**A 32-bit x86 Operating System Kernel** — written from scratch in C and NASM assembly, with a Windows-style graphical desktop and a text-mode shell.
 
 ---
 
@@ -19,6 +19,28 @@
 | **Memory** | Bitmap physical allocator + first-fit heap |
 | **Filesystem** | NovaeVFS -- in-memory flat filesystem |
 | **Shell** | NovaeShell -- 25+ built-in commands |
+| **Graphics** | 1024x768 32-bit linear framebuffer (GRUB VBE or Bochs/QEMU BGA), double buffered |
+| **Mouse** | PS/2 mouse on IRQ12 |
+| **Desktop** | Wallpapers, desktop icons, taskbar, Start menu with search, clock + calendar |
+| **Windows** | Drag, focus, minimize, maximize, resize, close |
+| **Apps** | Calculator, Notepad, File Explorer, Terminal, Settings |
+
+---
+
+## Desktop
+
+The default boot entry starts the graphical desktop:
+
+- **Start menu** (click the NovaeOS logo or press the Windows key): pinned apps, type-to-search, recent files, power menu (restart / shut down)
+- **Taskbar**: pinned apps with running indicators, clock (click for a calendar), show-desktop corner
+- **Desktop**: double-click icons to open them, right-click for a context menu
+- **Calculator**: operator precedence, parentheses, square, square root, percent, keyboard input
+- **Notepad**: edit and save files in NovaeVFS
+- **File Explorer**: browse, create, open and delete files
+- **Terminal**: runs every shell command (`help`, `ls`, `cat`, `fetch`...); `calc`, `notepad` and `settings` open the desktop apps
+- **Settings**: wallpaper (Flow, Aurora, Sunset, Midnight, Solid color), accent color, light/dark mode, taskbar alignment, system info, about
+
+The text-mode shell is still available from the **"NovaeOS 1.0.0 (Text mode shell)"** GRUB entry (kernel argument `text`).
 
 ---
 
@@ -50,6 +72,17 @@ d:/OS/
 |   |   +-- vga.c/h       <- VGA text mode 80x25
 |   |   +-- timer.c/h     <- PIT 8253 timer
 |   |   +-- keyboard.c/h  <- PS/2 keyboard
+|   |   +-- mouse.c/h     <- PS/2 mouse
+|   |   +-- rtc.c/h       <- CMOS real-time clock
+|   +-- gfx/
+|   |   +-- gfx.c/h       <- Framebuffer, drawing primitives, cursor
+|   |   +-- font8x16.c    <- Terminus 8x16 bitmap font (generated)
+|   +-- gui/
+|   |   +-- wm.c          <- Window manager + event loop
+|   |   +-- desktop.c     <- Wallpaper, icons, taskbar, Start menu
+|   |   +-- icons.c       <- Procedural icons and logo
+|   |   +-- widgets.c     <- Buttons, text boxes
+|   |   +-- apps/         <- calc, notepad, files, terminal, settings
 |   +-- mm/
 |   |   +-- pmm.c/h       <- Physical memory manager
 |   |   +-- heap.c/h      <- Kernel heap allocator
@@ -57,12 +90,14 @@ d:/OS/
 |   |   +-- vfs.c/h       <- Virtual filesystem
 |   +-- lib/
 |   |   +-- kstring.c/h   <- String utilities (no libc)
+|   |   +-- mem.c         <- memcpy/memset for the compiler
 |   +-- shell/
 |       +-- shell.c/h     <- Interactive shell + all apps
 +-- linker.ld             <- Kernel memory layout
 +-- Makefile              <- Build system
 +-- Dockerfile            <- Docker build environment
 +-- build.ps1             <- Windows build helper
++-- tools/gen_font.py     <- Regenerates kernel/gfx/font8x16.c
 +-- iso/boot/grub/grub.cfg  <- GRUB configuration
 ```
 

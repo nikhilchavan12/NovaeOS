@@ -43,6 +43,8 @@ static size_t kb_tail = 0;  /* Read index */
 
 static bool shift_pressed  = false;
 static bool caps_lock      = false;
+static bool ctrl_pressed   = false;
+static bool extended       = false;
 
 static inline uint8_t inb(uint16_t port) {
     uint8_t ret;
@@ -65,29 +67,65 @@ static char kb_buffer_pop(void) {
     return c;
 }
 
+static char extended_key(uint8_t scancode) {
+    switch (scancode) {
+        case 0x48: return KEY_UP;
+        case 0x50: return KEY_DOWN;
+        case 0x4B: return KEY_LEFT;
+        case 0x4D: return KEY_RIGHT;
+        case 0x47: return KEY_HOME;
+        case 0x4F: return KEY_END;
+        case 0x53: return KEY_DELETE;
+        case 0x5B: return KEY_SUPER;  /* left Windows key */
+        case 0x5C: return KEY_SUPER;  /* right Windows key */
+        case 0x1C: return '\n';   /* keypad Enter */
+        case 0x35: return '/';    /* keypad / */
+        default:   return 0;
+    }
+}
+
 static void keyboard_callback(registers_t *regs) {
     (void)regs;
     uint8_t scancode = inb(KB_DATA_PORT);
+
+    if (scancode == 0xE0) { extended = true; return; }
+
+    if (extended) {
+        extended = false;
+        if (scancode == 0x1D) { ctrl_pressed = true;  return; }
+        if (scancode == 0x9D) { ctrl_pressed = false; return; }
+        if (scancode & 0x80) return;               /* extended key release */
+        char c = extended_key(scancode);
+        if (c) kb_buffer_push(c);
+        return;
+    }
 
     if (scancode & 0x80) {
         /* Key release */
         uint8_t released = scancode & 0x7F;
         if (released == 0x2A || released == 0x36)   /* Shift */
             shift_pressed = false;
+        else if (released == 0x1D)                  /* Ctrl */
+            ctrl_pressed = false;
     } else {
         /* Key press */
         if (scancode == 0x2A || scancode == 0x36) {  /* Shift */
             shift_pressed = true;
+        } else if (scancode == 0x1D) {                /* Ctrl */
+            ctrl_pressed = true;
         } else if (scancode == 0x3A) {                /* Caps Lock */
             caps_lock = !caps_lock;
         } else {
             char c = 0;
-            bool upper = shift_pressed ^ caps_lock;
+            bool letter = sc_ascii_normal[scancode] >= 'a' && sc_ascii_normal[scancode] <= 'z';
+            bool upper = letter ? (shift_pressed ^ caps_lock) : shift_pressed;
             if (upper && scancode < 128)
                 c = sc_ascii_shift[scancode];
             else if (scancode < 128)
                 c = sc_ascii_normal[scancode];
 
+            if (ctrl_pressed && letter)
+                c = 0;   /* Ctrl+letter shortcuts are not supported yet */
             if (c)
                 kb_buffer_push(c);
         }
@@ -96,6 +134,10 @@ static void keyboard_callback(registers_t *regs) {
 
 void keyboard_init(void) {
     idt_register_handler(33, keyboard_callback);  /* IRQ1 = INT 33 */
+}
+
+char keyboard_try_getchar(void) {
+    return kb_buffer_pop();
 }
 
 bool keyboard_has_input(void) {
@@ -121,7 +163,7 @@ void keyboard_read_line(char *buf, int max_len) {
                 i--;
                 vga_putchar('\b');
             }
-        } else {
+        } else if ((unsigned char)c >= 0x20 && c != KEY_DELETE) {
             buf[i++] = c;
             vga_putchar(c);
         }

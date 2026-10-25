@@ -288,7 +288,7 @@ static void cmd_write(const char *filename) {
     vga_set_color(COLOR_FG, COLOR_BG);
 
     /* Clear existing content */
-    vfs_write(filename, "", 1);
+    vfs_write(filename, "", 0);
 
     char line[256];
     while (1) {
@@ -1090,6 +1090,22 @@ static void history_push(const char *cmd) {
 /* ============================================================================
  * Command dispatch
  * ============================================================================ */
+/* In the GUI terminal, full-screen text apps are replaced by desktop apps */
+static shell_gui_launcher_t gui_launcher = 0;
+
+void shell_set_gui_launcher(shell_gui_launcher_t launcher) {
+    gui_launcher = launcher;
+}
+
+static bool is_fullscreen_command(const char *cmd) {
+    static const char *names[] = {
+        "calc", "notepad", "write", "clock", "sysmon", "top", "settings", "matrix", "snake", 0
+    };
+    for (int i = 0; names[i]; i++)
+        if (kstrcmp(cmd, names[i]) == 0) return true;
+    return false;
+}
+
 static void dispatch(char *line) {
     /* Tokenize: command + args */
     char *saveptr = NULL;
@@ -1102,6 +1118,15 @@ static void dispatch(char *line) {
     /* Two-word args */
     char *arg1 = kstrtok(NULL, " \t", &saveptr);
     char *arg2 = kstrtok(NULL, " \t", &saveptr);
+
+    if (gui_launcher && is_fullscreen_command(cmd)) {
+        if (!gui_launcher(cmd, arg1)) {
+            vga_set_color(COLOR_WARNING, COLOR_BG);
+            vga_printf("'%s' is a full-screen text app; boot the text-mode entry to use it.\n", cmd);
+            vga_set_color(COLOR_FG, COLOR_BG);
+        }
+        return;
+    }
 
     if (kstrcmp(cmd, "help")     == 0) cmd_help();
     else if (kstrcmp(cmd, "clear")    == 0) vga_clear();
@@ -1144,6 +1169,15 @@ static void dispatch(char *line) {
         vga_puts("Type 'help' to see available commands.\n");
         vga_set_color(COLOR_FG, COLOR_BG);
     }
+}
+
+/* Run one command line (used by the GUI terminal) */
+void shell_exec(const char *input) {
+    char line[256];
+    kstrncpy(line, input, sizeof(line) - 1);
+    line[sizeof(line) - 1] = '\0';
+    history_push(line);
+    dispatch(line);
 }
 
 /* ============================================================================

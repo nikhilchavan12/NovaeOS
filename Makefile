@@ -24,6 +24,9 @@ CFLAGS  := -m32                  \
 
 ASFLAGS := -f elf32
 
+# libgcc provides 64-bit division helpers used by the calculator
+LIBGCC  := $(shell $(CC) -m32 -print-libgcc-file-name)
+
 LDFLAGS := -m elf_i386           \
             -T linker.ld
 
@@ -41,13 +44,28 @@ C_SRCS   := kernel/kernel.c            \
              kernel/drivers/vga.c      \
              kernel/drivers/timer.c    \
              kernel/drivers/keyboard.c \
+             kernel/drivers/mouse.c    \
+             kernel/drivers/rtc.c      \
              kernel/cpu/gdt.c          \
              kernel/cpu/idt.c          \
              kernel/mm/pmm.c           \
              kernel/mm/heap.c          \
              kernel/fs/vfs.c           \
              kernel/lib/kstring.c      \
-             kernel/shell/shell.c
+             kernel/lib/mem.c          \
+             kernel/shell/shell.c      \
+             kernel/gfx/gfx.c          \
+             kernel/gfx/font8x16.c     \
+             kernel/gfx/fbcon.c        \
+             kernel/gui/wm.c           \
+             kernel/gui/desktop.c      \
+             kernel/gui/icons.c        \
+             kernel/gui/widgets.c      \
+             kernel/gui/apps/calc.c    \
+             kernel/gui/apps/notepad.c \
+             kernel/gui/apps/files.c   \
+             kernel/gui/apps/terminal.c \
+             kernel/gui/apps/settings.c
 
 # ---- Object files -----------------------------------------------------------
 ASM_OBJS := $(patsubst %.asm, $(BUILD)/%.o, $(ASM_SRCS))
@@ -70,7 +88,7 @@ all: $(KERNEL)
 $(KERNEL): $(ALL_OBJS)
 	@mkdir -p $(dir $@)
 	@echo "  LD  $@"
-	$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) $(LIBGCC)
 
 # Compile assembly sources
 $(BUILD)/%.o: %.asm

@@ -34,12 +34,8 @@ COPY . .
 
 # Build using system gcc (32-bit mode) since we may not have cross-compiler
 # We override the CC/LD to use system tools with 32-bit flags
-RUN make all \
-    CC="gcc" \
-    LD="ld" \
-    CFLAGS="-m32 -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -O2 -Wall -Wextra -nostdlib -nostdinc -std=c11 -Ikernel" \
-    LDFLAGS="-m elf_i386 -T linker.ld --oformat binary" \
-    || echo "Build completed (check above for errors)"
+RUN make all
+
 
 # Output: /os/build/kernel.bin
 CMD ["bash", "-c", "echo 'Build done. Kernel at: /os/build/kernel.bin'"]

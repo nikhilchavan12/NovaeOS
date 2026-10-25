@@ -11,6 +11,8 @@ static uint32_t *pmm_bitmap    = 0;
 static size_t    total_blocks  = 0;
 static size_t    free_blocks   = 0;
 
+extern uint8_t _kernel_end[];   /* from linker.ld */
+
 /* ---- Bitmap helpers ---- */
 static inline void bitmap_set(size_t bit) {
     pmm_bitmap[bit / 32] |= (1U << (bit % 32));
@@ -35,16 +37,6 @@ static int bitmap_first_free(void) {
     return -1;
 }
 
-void pmm_init(uint32_t mem_size_kb, uint32_t *bitmap_addr) {
-    pmm_bitmap   = bitmap_addr;
-    total_blocks = (mem_size_kb * 1024) / PMM_BLOCK_SIZE;
-    free_blocks  = total_blocks;
-
-    /* Mark all memory as used initially */
-    for (size_t i = 0; i < total_blocks / 32 + 1; i++)
-        pmm_bitmap[i] = 0xFFFFFFFF;
-}
-
 /* Mark a 4KB block at physical address 'base' as free */
 static void pmm_mark_region_free(uint32_t base, uint32_t size) {
     size_t start_block = base / PMM_BLOCK_SIZE;
@@ -56,7 +48,7 @@ static void pmm_mark_region_free(uint32_t base, uint32_t size) {
 }
 
 /* Mark region as used (e.g. kernel, reserved memory) */
-static void pmm_mark_region_used(uint32_t base, uint32_t size) {
+void pmm_mark_region_used(uint32_t base, uint32_t size) {
     size_t start_block = base / PMM_BLOCK_SIZE;
     size_t block_count = (size + PMM_BLOCK_SIZE - 1) / PMM_BLOCK_SIZE;
     for (size_t i = 0; i < block_count; i++) {
@@ -65,6 +57,22 @@ static void pmm_mark_region_used(uint32_t base, uint32_t size) {
             if (free_blocks > 0) free_blocks--;
         }
     }
+}
+
+void pmm_init(uint32_t mem_size_kb, uint32_t *bitmap_addr) {
+    pmm_bitmap   = bitmap_addr;
+    total_blocks = (mem_size_kb * 1024) / PMM_BLOCK_SIZE;
+    free_blocks  = 0;
+
+    /* Mark all memory as used initially */
+    for (size_t i = 0; i < total_blocks / 32 + 1; i++)
+        pmm_bitmap[i] = 0xFFFFFFFF;
+
+    /* Free everything above the kernel image (low 1 MB + kernel stay reserved) */
+    uint32_t first_free = ((uint32_t)_kernel_end + PMM_BLOCK_SIZE - 1) & ~(uint32_t)(PMM_BLOCK_SIZE - 1);
+    uint32_t mem_end    = mem_size_kb * 1024;
+    if (first_free < mem_end)
+        pmm_mark_region_free(first_free, mem_end - first_free);
 }
 
 void *pmm_alloc_block(void) {

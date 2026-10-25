@@ -34,7 +34,13 @@ typedef enum {
     VGA_COLOR_WHITE         = 15,
 } vga_color_t;
 
+/* Receives every character written through vga_putchar ('\f' = clear screen) */
+typedef void (*vga_output_hook_t)(char c, uint8_t color);
+
 /* Function prototypes */
+void vga_set_output_hook(vga_output_hook_t hook);
+/* Use an 80x25 RAM buffer instead of 0xB8000 (framebuffer console) */
+void vga_redirect(uint16_t *buffer);
 void vga_init(void);
 void vga_clear(void);
 void vga_set_color(vga_color_t fg, vga_color_t bg);

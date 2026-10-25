@@ -12,17 +12,59 @@
 #include "mm/heap.h"
 #include "fs/vfs.h"
 #include "shell/shell.h"
+#include "gfx/gfx.h"
+#include "gfx/fbcon.h"
+#include "gui/gui.h"
+#include "lib/kstring.h"
 
 /* Multiboot magic number */
 #define MULTIBOOT_MAGIC 0x2BADB002
 
-/* Multiboot info structure (we use a minimal subset) */
+/* Multiboot info structure */
 typedef struct __attribute__((packed)) {
     unsigned int flags;
     unsigned int mem_lower;   /* in KB */
     unsigned int mem_upper;   /* in KB */
-    /* ... more fields we don't use */
+    unsigned int boot_device;
+    unsigned int cmdline;     /* flag bit 2 */
+    unsigned int mods_count, mods_addr;
+    unsigned int syms[4];
+    unsigned int mmap_length, mmap_addr;
+    unsigned int drives_length, drives_addr;
+    unsigned int config_table;
+    unsigned int boot_loader_name;
+    unsigned int apm_table;
+    unsigned int vbe_control_info, vbe_mode_info;
+    unsigned short vbe_mode, vbe_interface_seg, vbe_interface_off, vbe_interface_len;
+    unsigned long long framebuffer_addr;   /* flag bit 12 */
+    unsigned int framebuffer_pitch;
+    unsigned int framebuffer_width;
+    unsigned int framebuffer_height;
+    unsigned char framebuffer_bpp;
+    unsigned char framebuffer_type;        /* 1 = direct RGB */
 } multiboot_info_t;
+
+/* True if the kernel command line contains 'word' as a separate token */
+static bool cmdline_has(multiboot_info_t *mb, const char *word) {
+    if (!mb || !(mb->flags & 0x4) || !mb->cmdline) return false;
+    const char *s = (const char *)mb->cmdline;
+    size_t n = kstrlen(word);
+    for (; *s; s++) {
+        if (kstrncmp(s, word, n) == 0 && (s[n] == '\0' || s[n] == ' ') &&
+            (s == (const char *)mb->cmdline || s[-1] == ' '))
+            return true;
+    }
+    return false;
+}
+
+static void fpu_init(void) {
+    unsigned int cr0;
+    __asm__ volatile ("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1u << 2);           /* EM: no emulation */
+    cr0 |=  (1u << 1);           /* MP: monitor coprocessor */
+    __asm__ volatile ("mov %0, %%cr0" : : "r"(cr0));
+    __asm__ volatile ("fninit");
+}
 
 /* Kernel heap - 1 MB statically allocated in BSS */
 #define HEAP_SIZE (1024 * 1024)  /* 1 MB */
@@ -68,9 +110,10 @@ void kernel_main(unsigned int magic, multiboot_info_t *mbinfo) {
         mem_kb = mbinfo->mem_upper + 1024;  /* mem_upper is above 1MB */
     if (mem_kb < 4096)
         mem_kb = 32 * 1024;  /* Fallback: 32 MB */
+    if (mem_kb > 256 * 1024)
+        mem_kb = 256 * 1024; /* PMM bitmap covers 256 MB */
 
-    pmm_init(mem_kb, pmm_bitmap);
-    /* Mark first 4 MB as used (kernel + reserved) */
+    pmm_init(mem_kb, pmm_bitmap);   /* everything below _kernel_end stays reserved */
     vga_puts("[BOOT] PMM initialized\n");
 
     /* Step 6: Kernel heap */
@@ -93,10 +136,35 @@ void kernel_main(unsigned int magic, multiboot_info_t *mbinfo) {
     __asm__ volatile ("sti");
     vga_puts("[BOOT] Interrupts enabled\n");
 
+    fpu_init();
+
+    /* Step 11: Desktop GUI, unless the text-mode shell was requested */
+    gfx_boot_fb_t boot_fb = {0};
+    bool have_fb = mbinfo && (mbinfo->flags & (1u << 12)) && mbinfo->framebuffer_type == 1 &&
+                   mbinfo->framebuffer_addr < 0x100000000ULL;
+    if (have_fb) {
+        boot_fb.addr   = (uint32_t)mbinfo->framebuffer_addr;
+        boot_fb.pitch  = mbinfo->framebuffer_pitch;
+        boot_fb.width  = mbinfo->framebuffer_width;
+        boot_fb.height = mbinfo->framebuffer_height;
+        boot_fb.bpp    = mbinfo->framebuffer_bpp;
+    }
+
+    if (cmdline_has(mbinfo, "text")) {
+        /* The bootloader may still hand us a graphics mode: draw the text console into it */
+        if (have_fb && gfx_init(&boot_fb))
+            fbcon_init();
+    } else {
+        if (gfx_init(have_fb ? &boot_fb : NULL))
+            gui_run();
+        vga_set_color(VGA_COLOR_LIGHT_BROWN, VGA_COLOR_BLACK);
+        vga_puts("[BOOT] No linear framebuffer available, starting text shell\n");
+    }
+
     /* Brief boot delay so user can read messages */
     timer_sleep(1500);
 
-    /* Step 11: Launch the shell! */
+    /* Step 12: Launch the shell! */
     shell_run();
 
     /* Should never reach here */

@@ -7,7 +7,7 @@ bits 32
 
 ; Multiboot header constants
 MULTIBOOT_MAGIC     equ 0x1BADB002
-MULTIBOOT_FLAGS     equ 0x00000003   ; Align modules + memory map
+MULTIBOOT_FLAGS     equ 0x00000007   ; Align modules + memory map + video mode
 MULTIBOOT_CHECKSUM  equ -(MULTIBOOT_MAGIC + MULTIBOOT_FLAGS)
 
 ; Stack size
@@ -21,6 +21,13 @@ align 4
     dd MULTIBOOT_MAGIC
     dd MULTIBOOT_FLAGS
     dd MULTIBOOT_CHECKSUM
+    ; Address fields (unused: flag 16 is clear, GRUB loads us as ELF)
+    dd 0, 0, 0, 0, 0
+    ; Preferred video mode: linear framebuffer 1024x768x32
+    dd 0            ; mode_type (0 = linear graphics)
+    dd 1024         ; width
+    dd 768          ; height
+    dd 32           ; depth
 
 ; =============================================================================
 ; BSS Section - Uninitialized data (stack)
